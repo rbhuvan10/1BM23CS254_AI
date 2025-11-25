@@ -1,0 +1,126 @@
+# ================================
+#  Resolution with Unification
+# ================================
+
+import copy
+
+# ---------- Unification ----------
+def unify(x, y, s):
+    if s is None:
+        return None
+    if x == y:
+        return s
+    if isinstance(x, str) and x.islower():    # variable
+        return unify_var(x, y, s)
+    if isinstance(y, str) and y.islower():    # variable
+        return unify_var(y, x, s)
+    if isinstance(x, tuple) and isinstance(y, tuple):
+        if x[0] != y[0] or len(x) != len(y):
+            return None
+        for a, b in zip(x[1:], y[1:]):
+            s = unify(a, b, s)
+        return s
+    return None
+
+
+def unify_var(var, x, s):
+    if var in s:
+        return unify(s[var], x, s)
+    if x in s:
+        return unify(var, s[x], s)
+    # occurs-check ignored for this assignment
+    s2 = copy.deepcopy(s)
+    s2[var] = x
+    return s2
+
+
+# ---------- Apply substitution ----------
+def substitute(clause, subs):
+    new_clause = []
+    for pred in clause:
+        name = pred[0]
+        args = []
+        for arg in pred[1:]:
+            if arg in subs:
+                args.append(subs[arg])
+            else:
+                args.append(arg)
+        new_clause.append((name, *args))
+    return new_clause
+
+
+# ---------- Resolution Step ----------
+def resolve(c1, c2):
+    steps = []
+    for p in c1:
+        for q in c2:
+            if p[0] == "~" + q[0] or q[0] == "~" + p[0]:
+                # predicate names match (negated)
+                pred1 = p
+                pred2 = q
+
+                subs = unify(pred1[1:], pred2[1:], {})
+                if subs is not None:
+                    new_c1 = substitute([x for x in c1 if x != p], subs)
+                    new_c2 = substitute([x for x in c2 if x != q], subs)
+                    new_clause = list({x for x in new_c1 + new_c2})
+
+                    steps.append((subs, new_clause))
+    return steps
+
+
+# ---------- Knowledge Base ----------
+# Represent predicate likes(John, Peanuts) as ("likes", "John", "Peanuts")
+
+KB = [
+    [("~likes", "John", "x"), ("food", "x")],          # a
+    [("food", "Apple")],                               # b
+    [("food", "vegetables")],                          # c
+    [("~eats", "y", "z"), ("killed", "y"), ("food", "z")],  # d
+    [("eats", "Anil", "Peanuts")],                     # e
+    [("alive", "Anil")],                               # f
+    [("~eats", "Anil", "w"), ("eats", "Harry", "w")],  # g
+    [("killed", "g"), ("~alive", "g")],                # h
+    [("~alive", "k"), ("~killed", "k")],               # i
+    [("likes", "John", "Peanuts")]                     # j (negated goal)
+]
+
+# Negate query: prove likes(John, Peanuts)
+KB.append([("~likes", "John", "Peanuts")])
+
+# ---------- Resolution Loop ----------
+def resolution(KB):
+    print("\n====== Resolution Proof Steps ======\n")
+
+    new = set()
+    steps_number = 1
+
+    while True:
+        pairs = [(KB[i], KB[j]) for i in range(len(KB)) for j in range(i+1, len(KB))]
+
+        for (c1, c2) in pairs:
+            res = resolve(c1, c2)
+            for subs, resolvent in res:
+                print(f"Step {steps_number}:")
+                print(f"  Resolving {c1}  AND  {c2}")
+                print(f"  Substitution: {subs}")
+                print(f"  New clause: {resolvent}\n")
+                steps_number += 1
+
+                if resolvent == []:
+                    print(" ==> Derived empty clause {}. Hence proved.")
+                    return True
+
+                new.add(tuple(resolvent))
+
+        # Add new clauses
+        new_clauses = [list(x) for x in new if list(x) not in KB]
+        if not new_clauses:
+            print("No new clauses. Cannot prove.")
+            return False
+
+        KB.extend(new_clauses)
+
+
+# ---------- Run ----------
+resolution(KB)
